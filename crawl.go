@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"bufio"
 	"os"
+	"net/http"
 )
 
 func check(e error) {
@@ -20,11 +21,19 @@ func main() {
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		fmt.Println(scanner.Text())
+		currentUrl := scanner.Text()
+		fmt.Println("Visiting   :", currentUrl)
+		resp, err2 := http.Get(currentUrl)
+		check(err2)
+		
+		fmt.Println("StatusCode :", resp.StatusCode)
+	
+		fmt.Println("Body       :", resp.Body)
+		fmt.Println()
 	}
 
-	err2 := scanner.Err()
-	check(err2)
+	err3 := scanner.Err()
+	check(err3)
 
 	
 	fmt.Println("Not a crawler yet, but I'm getting there...")
