@@ -17,9 +17,16 @@ func check(e error) {
 
 func main() {
 
+	// inital seeds
 	file, err := os.Open("seeds.txt")
 	check(err)
 	defer file.Close()
+
+	// visited nodes are stored in this maps
+	visited := make(map[string]bool)
+
+	// queue of pages to be visited
+	queue := make([]string, 0)
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -30,20 +37,20 @@ func main() {
 
 		fmt.Println("StatusCode :", resp.StatusCode)
 
-		links := parsePage(resp.Body)
-
-		fmt.Println("Found links:", len(links))
-		parsePage(resp.Body)
-		fmt.Println()
+		parsePage(resp.Body, queue)
+		visited[currentUrl] = true;
 	}
 
 	err3 := scanner.Err()
 	check(err3)
 
 	fmt.Println("Not a crawler yet, but I'm getting there...")
+	fmt.Println("Queue size: ", len(queue))
+	fmt.Println("Visited : ", len(visited))
+	
 }
 
-func parsePage(body io.ReadCloser) (links [2]string) {
+func parsePage(body io.ReadCloser, queue []string) {
 
 	doc, err := html.Parse(body)
 	if err != nil {
@@ -56,6 +63,7 @@ func parsePage(body io.ReadCloser) (links [2]string) {
 			for i := 0; i < len(n.Attr); i++ {
 				if n.Attr[i].Key == "href" {
 					fmt.Println("new link: ", n.Attr[i].Val)
+					queue = append(queue, n.Attr[i].Val)
 				}
 			}
 		}
