@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"io"
 	"golang.org/x/net/html"
 )
@@ -43,7 +44,7 @@ func main() {
 		url := queue[0];
 		queue = queue[1:] 
 		oldQueueLen := len(queue)
-		fmt.Print("Fetching :", url)
+		fmt.Print(len(visited), ": ", url)
 		resp, err2 := http.Get(url)
 		check(err2)
 
@@ -58,12 +59,17 @@ func main() {
 
 		// see if they are already visited
 		for _,link := range links {
-			if !visited[link] {
-				queue = append(queue, link)
+			
+			formatted := formatUrl(link)		
+
+			if formatted != "" && !visited[formatted] {
+				// TODO handle same link on a single page
+				queue = append(queue, formatted)
 			}
 		}
 
-		fmt.Println(", new links: ", (len(queue) - oldQueueLen) )
+		fmt.Print(", new links: ", (len(queue) - oldQueueLen))
+		fmt.Println(", in queue: ", len(queue))
 	}
 
 	fmt.Println("Not a crawler yet, but I'm getting there...")
@@ -98,4 +104,17 @@ func parsePage(body io.ReadCloser) []string {
 	}
 	
 	return visit(doc)
+}
+
+func formatUrl(url string) string {
+
+	var ret string	
+
+	if url == "javascript:;" || url == "#" || url == "/" {
+		ret = ""
+	} else if strings.HasPrefix(url, "//") {
+		ret = "http:" + url
+	}
+
+	return ret
 }
