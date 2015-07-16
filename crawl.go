@@ -3,14 +3,14 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"golang.org/x/net/html"
+	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
-	"io"
 	"time"
-	"net/url"
-	"golang.org/x/net/html"
 )
 
 func check(e error) {
@@ -19,35 +19,35 @@ func check(e error) {
 	}
 }
 
-
 func main() {
 
 	startTime := time.Now().UnixNano() / 1e6
-	
+
 	// visited nodes are stored in this maps
 	visited := make(map[string]bool)
+
+	// dead links
+	dead := make(map[string]bool)
 
 	// queue of pages to be visited
 	queue := make([]string, 0)
 
-// handle Ctrl+C
-go func() {
-    sigchan := make(chan os.Signal, 10)
-    signal.Notify(sigchan, os.Interrupt)
-    <-sigchan
-    d := time.Now().UnixNano() / 1e6 - startTime
-    fmt.Println("\n\nStatistics")
-    fmt.Println("==========\n")
-    fmt.Println("Duration         :", d, "ms")
-    fmt.Println("Visited          :", len(visited))
-    fmt.Println("Still in queue   :", len(queue))
-    fmt.Printf("Pages per second : %f\n", (float64(len(visited)) / float64(d) * 1000.))
+	// handle Ctrl+C (print statistics)
+	go func() {
+		sigchan := make(chan os.Signal, 10)
+		signal.Notify(sigchan, os.Interrupt)
+		<-sigchan
+		d := time.Now().UnixNano()/1e6 - startTime
+		fmt.Println("\n\nStatistics")
+		fmt.Println("==========\n")
+		fmt.Println("Duration         :", d, "ms")
+		fmt.Println("Visited          :", len(visited))
+		fmt.Println("Dead links       :", len(dead))
+		fmt.Println("Still in queue   :", len(queue))
+		fmt.Printf("Pages per second : %f\n", (float64(len(visited)) / float64(d) * 1000.))
 
-    // do last actions and wait for all write operations to end
-
-    os.Exit(0)
-}()
-
+		os.Exit(0)
+	}()
 
 	// inital seeds
 	file, err := os.Open("seeds.txt")
@@ -63,39 +63,37 @@ go func() {
 	err3 := scanner.Err()
 	check(err3)
 
-
 	// visit pages from the queue
 	for len(queue) > 0 {
-		currentUrl := queue[0];
-		queue = queue[1:] 
+		currentUrl := queue[0]
+		queue = queue[1:]
 		oldQueueLen := len(queue)
 		fmt.Print(len(visited), ": ", currentUrl)
 		resp, err2 := http.Get(currentUrl)
-		check(err2)
 
-		fmt.Print(", response: ", resp.StatusCode)
-		fmt.Print(", parsing... ")
-		
-		links := parsePage(resp.Body)
+		if (err2 == nil) {
 
-		visited[currentUrl] = true;
-		
-		fmt.Print(" links total: ", len(links))
+			fmt.Print(", response:", resp.StatusCode, ", parsing...")
+			links := parsePage(resp.Body)
+			visited[currentUrl] = true
+			fmt.Print(" links total: ", len(links))
 
-		// see if they are already visited
-		for link, _ := range links {
-			
-			//  TODO find a smarter wasy to pass the host name
-			formatted := formatUrl(link, currentUrl)	
+			// see if they are already visited
+			for link, _ := range links {
 
-			if formatted != "" && !visited[formatted] {
-				// TODO handle same link on a single page
-				queue = append(queue, formatted)
+				formatted := formatUrl(link, currentUrl)
+
+				if formatted != "" && !visited[formatted] {
+					// TODO handle same link on a single page
+					queue = append(queue, formatted)
+				}
 			}
-		}
 
-		fmt.Print(", new links: ", (len(queue) - oldQueueLen))
-		fmt.Println(", in queue: ", len(queue))
+			fmt.Println(", new links: ", (len(queue) - oldQueueLen), ", in queue: ", len(queue))
+		} else {
+			fmt.Println("\nError while fetching:", currentUrl)
+			dead[currentUrl] = true
+		}
 	}
 }
 
@@ -121,7 +119,7 @@ func parsePage(body io.ReadCloser) map[string]bool {
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			newLinks := visit(c)
 			for k, v := range newLinks {
-			    links[k] = v
+				links[k] = v
 			}
 		}
 		return links
@@ -130,7 +128,6 @@ func parsePage(body io.ReadCloser) map[string]bool {
 	return visit(doc)
 
 }
-
 
 func formatUrl(link string, origPageUrl string) string {
 
