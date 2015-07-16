@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
 	"io"
+	"time"
 	"golang.org/x/net/html"
 )
 
@@ -16,15 +18,40 @@ func check(e error) {
 	}
 }
 
+
 func main() {
+
+	startTime := time.Now().UnixNano() / 1e6
+	
+	// visited nodes are stored in this maps
+	visited := make(map[string]bool)
+
+	// queue of pages to be visited
+	queue := make([]string, 0)
+
+// handle Ctrl+C
+go func() {
+    sigchan := make(chan os.Signal, 10)
+    signal.Notify(sigchan, os.Interrupt)
+    <-sigchan
+    d := time.Now().UnixNano() / 1e6 - startTime
+    fmt.Println("\n\nStatistics")
+    fmt.Println("==========\n")
+    fmt.Println("Duration         :", d, "ms")
+    fmt.Println("Visited          :", len(visited))
+    fmt.Println("Still in queue   :", len(queue))
+    fmt.Printf("Pages per second : %f\n", (float64(len(visited)) / float64(d) * 1000.))
+
+    // do last actions and wait for all write operations to end
+
+    os.Exit(0)
+}()
+
 
 	// inital seeds
 	file, err := os.Open("seeds.txt")
 	check(err)
 	defer file.Close()
-
-	// queue of pages to be visited
-	queue := make([]string, 0)
 
 	// put all seeds to queue
 	scanner := bufio.NewScanner(file)
@@ -35,9 +62,6 @@ func main() {
 	err3 := scanner.Err()
 	check(err3)
 
-
-	// visited nodes are stored in this maps
-	visited := make(map[string]bool)
 
 	// visit pages from the queue
 	for len(queue) > 0 {
@@ -58,7 +82,7 @@ func main() {
 		fmt.Print(" links total: ", len(links))
 
 		// see if they are already visited
-		for _,link := range links {
+		for link, _ := range links {
 			
 			formatted := formatUrl(link)		
 
@@ -78,33 +102,38 @@ func main() {
 	
 }
 
-func parsePage(body io.ReadCloser) []string {
+func parsePage(body io.ReadCloser) map[string]bool {
 
 	doc, err := html.Parse(body)
 	if err != nil {
 		fmt.Println("Error : ", err)
 	}
 
-	var visit func(*html.Node) []string
-	visit = func(n *html.Node) []string {
-		links := make([]string, 0)
+	var visit func(*html.Node) map[string]bool
+	visit = func(n *html.Node) map[string]bool {
+		links := make(map[string]bool)
 
 		if n.Type == html.ElementNode && n.Data == "a" {
 			for i := 0; i < len(n.Attr); i++ {
 				if n.Attr[i].Key == "href" {
 					// fmt.Println("new link: ", n.Attr[i].Val)
-					links = append(links, n.Attr[i].Val)
+					links[n.Attr[i].Val] = true
 				}
 			}
 		}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			links = append(links, visit(c)...)
+			newLinks := visit(c)
+			for k, v := range newLinks {
+			    links[k] = v
+			}
 		}
 		return links
 	}
-	
+
 	return visit(doc)
+
 }
+
 
 func formatUrl(url string) string {
 
