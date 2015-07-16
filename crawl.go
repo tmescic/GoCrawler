@@ -9,6 +9,7 @@ import (
 	"strings"
 	"io"
 	"time"
+	"net/url"
 	"golang.org/x/net/html"
 )
 
@@ -56,8 +57,8 @@ go func() {
 	// put all seeds to queue
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		url := scanner.Text()
-		queue = append(queue, url)
+		seedUrl := scanner.Text()
+		queue = append(queue, seedUrl)
 	}
 	err3 := scanner.Err()
 	check(err3)
@@ -65,11 +66,11 @@ go func() {
 
 	// visit pages from the queue
 	for len(queue) > 0 {
-		url := queue[0];
+		currentUrl := queue[0];
 		queue = queue[1:] 
 		oldQueueLen := len(queue)
-		fmt.Print(len(visited), ": ", url)
-		resp, err2 := http.Get(url)
+		fmt.Print(len(visited), ": ", currentUrl)
+		resp, err2 := http.Get(currentUrl)
 		check(err2)
 
 		fmt.Print(", response: ", resp.StatusCode)
@@ -77,14 +78,15 @@ go func() {
 		
 		links := parsePage(resp.Body)
 
-		visited[url] = true;
+		visited[currentUrl] = true;
 		
 		fmt.Print(" links total: ", len(links))
 
 		// see if they are already visited
 		for link, _ := range links {
 			
-			formatted := formatUrl(link)		
+			//  TODO find a smarter wasy to pass the host name
+			formatted := formatUrl(link, currentUrl)	
 
 			if formatted != "" && !visited[formatted] {
 				// TODO handle same link on a single page
@@ -95,11 +97,6 @@ go func() {
 		fmt.Print(", new links: ", (len(queue) - oldQueueLen))
 		fmt.Println(", in queue: ", len(queue))
 	}
-
-	fmt.Println("Not a crawler yet, but I'm getting there...")
-	fmt.Println("Queue size: ", len(queue))
-	fmt.Println("Visited : ", len(visited))
-	
 }
 
 func parsePage(body io.ReadCloser) map[string]bool {
@@ -135,15 +132,21 @@ func parsePage(body io.ReadCloser) map[string]bool {
 }
 
 
-func formatUrl(url string) string {
+func formatUrl(link string, origPageUrl string) string {
 
-	var ret string	
+	var ret string
 
-	if url == "javascript:;" || url == "#" || url == "/" {
+	if strings.HasPrefix(link, "http://") || strings.HasPrefix(link, "https://") {
+		ret = link
+	} else if link == "javascript:;" || link == "#" || link == "/" {
 		ret = ""
-	} else if strings.HasPrefix(url, "//") {
-		ret = "http:" + url
+	} else if strings.HasPrefix(link, "//") { // missing http: at the beggining
+		ret = "http:" + link
+	} else if strings.HasPrefix(link, "/") { // relative link
+		u, _ := url.Parse(origPageUrl)
+		host := u.Host
+		scheme := u.Scheme
+		ret = scheme + "://" + host + link
 	}
-
 	return ret
 }
