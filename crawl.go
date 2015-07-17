@@ -30,7 +30,7 @@ func main() {
 	dead := make(map[string]bool)
 
 	// queue of pages to be visited
-	queue := make([]string, 0)
+	queue := make(map[string]bool)
 
 	// handle Ctrl+C (print statistics)
 	go func() {
@@ -58,38 +58,30 @@ func main() {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		seedUrl := scanner.Text()
-		queue = append(queue, seedUrl)
+		queue[seedUrl] = true
 	}
 	err3 := scanner.Err()
 	check(err3)
 
-	// visit pages from the queue
+	// visit pages from the queue until it's empty (that will never happen)
 	for len(queue) > 0 {
-		currentUrl := queue[0]
-		queue = queue[1:]
+		currentUrl := getNext(queue)
+		delete(queue, currentUrl)
 		oldQueueLen := len(queue)
 		fmt.Print(len(visited), ": ", currentUrl)
 		resp, err2 := http.Get(currentUrl)
 
 		if (err2 == nil) {
 
-			fmt.Print(", response:", resp.StatusCode, ", parsing...")
+			fmt.Print(" [R:", resp.StatusCode, "...")
 			links := parsePage(resp.Body)
 			visited[currentUrl] = true
-			fmt.Print(" links total: ", len(links))
+			fmt.Print(", F:", len(links))
 
-			// see if they are already visited
-			for link, _ := range links {
+			// add new links to queue
+			add(queue, links, currentUrl, visited)
 
-				formatted := formatUrl(link, currentUrl)
-
-				if formatted != "" && !visited[formatted] {
-					// TODO handle same link on a single page
-					queue = append(queue, formatted)
-				}
-			}
-
-			fmt.Println(", new links: ", (len(queue) - oldQueueLen), ", in queue: ", len(queue))
+			fmt.Println(", N:", (len(queue) - oldQueueLen), ", T:", len(queue))
 		} else {
 			fmt.Println("\nError while fetching:", currentUrl)
 			dead[currentUrl] = true
@@ -97,30 +89,28 @@ func main() {
 	}
 }
 
-func parsePage(body io.ReadCloser) map[string]bool {
+// Parses the given page and return all links found on the page.
+// Duplicates are possible in the returned array.
+func parsePage(body io.ReadCloser) []string {
 
 	doc, err := html.Parse(body)
 	if err != nil {
 		fmt.Println("Error : ", err)
 	}
 
-	var visit func(*html.Node) map[string]bool
-	visit = func(n *html.Node) map[string]bool {
-		links := make(map[string]bool)
+	var visit func(*html.Node) []string
+	visit = func(n *html.Node) []string {
+		links := make([]string, 0)
 
 		if n.Type == html.ElementNode && n.Data == "a" {
 			for i := 0; i < len(n.Attr); i++ {
 				if n.Attr[i].Key == "href" {
-					// fmt.Println("new link: ", n.Attr[i].Val)
-					links[n.Attr[i].Val] = true
+					links = append(links, n.Attr[i].Val)
 				}
 			}
 		}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			newLinks := visit(c)
-			for k, v := range newLinks {
-				links[k] = v
-			}
+			links = append(links, visit(c)...)
 		}
 		return links
 	}
@@ -129,9 +119,11 @@ func parsePage(body io.ReadCloser) map[string]bool {
 
 }
 
+// Formats the raw link found in the page (e.g. ingores javascript links, adds hostname 
+// to relative links etc.)
 func formatUrl(link string, origPageUrl string) string {
 
-	var ret string
+	ret := ""
 
 	if strings.HasPrefix(link, "http://") || strings.HasPrefix(link, "https://") {
 		ret = link
@@ -147,3 +139,24 @@ func formatUrl(link string, origPageUrl string) string {
 	}
 	return ret
 }
+
+// Returns the next item from the queue. If the queue is empty, an empty string is returned.
+// Item is selected from the queue randomly.
+func getNext(queue map[string]bool) string {
+	for k := range queue {
+		return k
+	}
+	return ""
+}
+
+// Adds the new link to the queue. The link is formatted first. If it's already visited that 
+// it's not added to the queue
+func add(queue map[string]bool, newLinks []string, origPageUrl string, visited map[string]bool) {
+	for _, link := range newLinks {
+		formatted := formatUrl(link, origPageUrl)
+		if formatted != "" && !visited[formatted] {
+			queue[formatted] = true
+		}
+	}
+}
+
