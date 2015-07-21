@@ -32,6 +32,9 @@ func main() {
 	// queue of pages to be visited
 	queue := make(map[string]bool)
 
+	// a list of links to include (if defined, only pages that match one of the lines from this file will be visited)
+	includes := getLinesFromFile("include.txt") 
+
 	// handle Ctrl+C (print statistics)
 	go func() {
 		sigchan := make(chan os.Signal, 10)
@@ -49,19 +52,10 @@ func main() {
 		os.Exit(0)
 	}()
 
-	// inital seeds
-	file, err := os.Open("seeds.txt")
-	check(err)
-	defer file.Close()
-
-	// put all seeds to queue
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		seedUrl := scanner.Text()
-		queue[seedUrl] = true
+	seeds := getLinesFromFile("seeds.txt")
+	for _, seed := range seeds {
+		queue[seed] = true
 	}
-	err3 := scanner.Err()
-	check(err3)
 
 	// visit pages from the queue until it's empty (that will never happen)
 	for len(queue) > 0 {
@@ -69,24 +63,41 @@ func main() {
 		delete(queue, currentUrl)
 		oldQueueLen := len(queue)
 		fmt.Print(len(visited), ": ", currentUrl)
+		
 		resp, err2 := http.Get(currentUrl)
 
 		if (err2 == nil) {
 
-			fmt.Print(" [R:", resp.StatusCode, "...")
+			fmt.Print(" [R:", resp.StatusCode)
 			links := parsePage(resp.Body)
 			visited[currentUrl] = true
 			fmt.Print(", F:", len(links))
 
 			// add new links to queue
-			add(queue, links, currentUrl, visited)
+			add(queue, links, currentUrl, visited, includes)
 
-			fmt.Println(", N:", (len(queue) - oldQueueLen), ", T:", len(queue))
+			fmt.Print(", N:",(len(queue) - oldQueueLen),", Q:",len(queue),"]\n")
 		} else {
 			fmt.Println("\nError while fetching:", currentUrl)
 			dead[currentUrl] = true
 		}
 	}
+}
+
+func getLinesFromFile(fileName string) []string {
+
+	lines := make ([]string, 0)
+
+	file, err := os.Open(fileName)
+	check(err)
+	defer file.Close()
+
+	// read lines to an array
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+	return lines
 }
 
 // Parses the given page and return all links found on the page.
@@ -151,11 +162,21 @@ func getNext(queue map[string]bool) string {
 
 // Adds the new link to the queue. The link is formatted first. If it's already visited that 
 // it's not added to the queue
-func add(queue map[string]bool, newLinks []string, origPageUrl string, visited map[string]bool) {
+func add(queue map[string]bool, newLinks []string, origPageUrl string, visited map[string]bool, includes []string) {
 	for _, link := range newLinks {
 		formatted := formatUrl(link, origPageUrl)
 		if formatted != "" && !visited[formatted] {
-			queue[formatted] = true
+		
+			if len(includes) == 0 {
+				queue[formatted] = true
+			} else {
+				for _, include := range includes {
+					if (strings.Contains(strings.ToLower(formatted), strings.ToLower(include))) {
+						queue[formatted] = true
+						break
+					}
+				}
+			}
 		}
 	}
 }
