@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"strings"
 	"time"
+	"runtime"
 )
 
 func check(e error) {
@@ -40,14 +41,8 @@ func main() {
 		sigchan := make(chan os.Signal, 10)
 		signal.Notify(sigchan, os.Interrupt)
 		<-sigchan
-		d := time.Now().UnixNano()/1e6 - startTime
-		fmt.Println("\n\nStatistics")
-		fmt.Println("==========\n")
-		fmt.Println("Duration         :", d, "ms")
-		fmt.Println("Visited          :", len(visited))
-		fmt.Println("Dead links       :", len(dead))
-		fmt.Println("Still in queue   :", len(queue))
-		fmt.Printf("Pages per second : %f\n", (float64(len(visited)) / float64(d) * 1000.))
+		
+		printStats(startTime, visited, dead, queue)
 
 		os.Exit(0)
 	}()
@@ -82,6 +77,23 @@ func main() {
 			dead[currentUrl] = true
 		}
 	}
+	
+	printStats(startTime, visited, dead, queue)
+}
+
+func printStats(startTime int64, visited map[string]bool, dead map[string]bool, queue map[string]bool) {
+
+	d := time.Now().UnixNano()/1e6 - startTime
+
+	fmt.Println("\n\nStatistics")
+	fmt.Println("==========\n")
+	fmt.Println("Logical cores    :", runtime.NumCPU())
+	fmt.Println("Duration         :", d, "ms")
+	fmt.Println("Visited          :", len(visited))
+	fmt.Println("Dead links       :", len(dead))
+	fmt.Println("Still in queue   :", len(queue))
+
+	fmt.Printf("Pages per second : %f\n", (float64(len(visited)) / float64(d) * 1000.))
 }
 
 func getLinesFromFile(fileName string) []string {
