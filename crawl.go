@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 	"runtime"
+	"regexp"
 )
 
 func check(e error) {
@@ -33,8 +34,13 @@ func main() {
 	// queue of pages to be visited
 	queue := make(map[string]bool)
 
-	// a list of links to include (if defined, only pages that match one of the lines from this file will be visited)
-	includes := getLinesFromFile("include.txt") 
+	// Loads the ignore list. Every new url is checked against the patterns in 
+	// the ignore list. If it matches one of them, then it is not added to the queue.
+	ignoresTxt := getLinesFromFile("ignore.txt") 
+	ignores := make([]*regexp.Regexp, len(ignoresTxt))
+	for i, pattern := range ignoresTxt {
+		ignores[i] = regexp.MustCompile(pattern)
+	}
 
 	// handle Ctrl+C (print statistics)
 	go func() {
@@ -69,7 +75,7 @@ func main() {
 			fmt.Print(", F:", len(links))
 
 			// add new links to queue
-			add(queue, links, currentUrl, visited, includes)
+			add(queue, links, currentUrl, visited, ignores)
 
 			fmt.Print(", N:",(len(queue) - oldQueueLen),", Q:",len(queue),"]\n")
 		} else {
@@ -96,6 +102,8 @@ func printStats(startTime int64, visited map[string]bool, dead map[string]bool, 
 	fmt.Printf("Pages per second : %f\n", (float64(len(visited)) / float64(d) * 1000.))
 }
 
+// Opens the file with given name, reads it, and returns an array all 
+// lines. If a line starts with # it is ignored (comment).
 func getLinesFromFile(fileName string) []string {
 
 	lines := make ([]string, 0)
@@ -107,7 +115,10 @@ func getLinesFromFile(fileName string) []string {
 	// read lines to an array
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
+		newLine := scanner.Text()
+		if !strings.HasPrefix(newLine, "#") {
+			lines = append(lines, scanner.Text())
+		}
 	}
 	return lines
 }
@@ -174,20 +185,22 @@ func getNext(queue map[string]bool) string {
 
 // Adds the new link to the queue. The link is formatted first. If it's already visited that 
 // it's not added to the queue
-func add(queue map[string]bool, newLinks []string, origPageUrl string, visited map[string]bool, includes []string) {
+func add(queue map[string]bool, newLinks []string, origPageUrl string, visited map[string]bool, ignores []*regexp.Regexp) {
 	for _, link := range newLinks {
 		formatted := formatUrl(link, origPageUrl)
 		if formatted != "" && !visited[formatted] {
-		
-			if len(includes) == 0 {
+			ignoreIt := false
+			for _, ignore := range ignores {
+				if ignore.MatchString(formatted) {
+					ignoreIt = true
+					break
+				}
+			}
+			if !ignoreIt {
+				// Add it to queue if it's not on the ignore list
 				queue[formatted] = true
 			} else {
-				for _, include := range includes {
-					if (strings.Contains(strings.ToLower(formatted), strings.ToLower(include))) {
-						queue[formatted] = true
-						break
-					}
-				}
+				fmt.Println("Ignoring: ", formatted)
 			}
 		}
 	}
