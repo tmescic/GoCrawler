@@ -48,7 +48,6 @@ func main() {
 		inv := strings.HasPrefix(pattern, "!")
 		if inv {
 			pattern = pattern[1:] // remove the "!"
-			fmt.Println("new pattern : ", pattern)
 		}
 		compiledRule := regexp.MustCompile(pattern)
 		ignores[i] = IgnoreRule{rule : compiledRule, inverse : inv} 
