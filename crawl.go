@@ -51,12 +51,6 @@ func main() {
 			fmt.Println("new pattern : ", pattern)
 		}
 		compiledRule := regexp.MustCompile(pattern)
-		fmt.Println("match1 : ", compiledRule.MatchString("123123"))
-		fmt.Println("match2 : ", compiledRule.MatchString("123.jpg"))
-		fmt.Println("match3 : ", compiledRule.MatchString("123_jpg_123"))
-		fmt.Println("match4 : ", compiledRule.MatchString("njuskalo"))
-		fmt.Println("match5 : ", compiledRule.MatchString("http://www.njuskalo.hr/"))
-		fmt.Println("match6 : ", compiledRule.MatchString("https://asdasd"))
 		ignores[i] = IgnoreRule{rule : compiledRule, inverse : inv} 
 	}
 
@@ -219,7 +213,7 @@ func add(queue map[string]bool, newLinks []string, origPageUrl string, visited m
 				// Add it to queue if it's not on the ignore list
 				queue[formatted] = true
 			} else {
-				fmt.Println("Ignoring: ", formatted)
+				// fmt.Println("Ignoring: ", formatted)
 			}
 		}
 	}
