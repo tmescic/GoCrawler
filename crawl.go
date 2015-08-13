@@ -21,6 +21,12 @@ func check(e error) {
 	}
 }
 
+
+type IgnoreRule struct {
+	rule *regexp.Regexp
+	inverse  bool
+} 
+	
 func main() {
 
 	startTime := time.Now().UnixNano() / 1e6
@@ -37,9 +43,21 @@ func main() {
 	// Loads the ignore list. Every new url is checked against the patterns in 
 	// the ignore list. If it matches one of them, then it is not added to the queue.
 	ignoresTxt := getLinesFromFile("ignore.txt") 
-	ignores := make([]*regexp.Regexp, len(ignoresTxt))
+	ignores := make([]IgnoreRule, len(ignoresTxt))
 	for i, pattern := range ignoresTxt {
-		ignores[i] = regexp.MustCompile(pattern)
+		inv := strings.HasPrefix(pattern, "!")
+		if inv {
+			pattern = pattern[1:] // remove the "!"
+			fmt.Println("new pattern : ", pattern)
+		}
+		compiledRule := regexp.MustCompile(pattern)
+		fmt.Println("match1 : ", compiledRule.MatchString("123123"))
+		fmt.Println("match2 : ", compiledRule.MatchString("123.jpg"))
+		fmt.Println("match3 : ", compiledRule.MatchString("123_jpg_123"))
+		fmt.Println("match4 : ", compiledRule.MatchString("njuskalo"))
+		fmt.Println("match5 : ", compiledRule.MatchString("http://www.njuskalo.hr/"))
+		fmt.Println("match6 : ", compiledRule.MatchString("https://asdasd"))
+		ignores[i] = IgnoreRule{rule : compiledRule, inverse : inv} 
 	}
 
 	// handle Ctrl+C (print statistics)
@@ -185,16 +203,17 @@ func getNext(queue map[string]bool) string {
 
 // Adds the new link to the queue. The link is formatted first. If it's already visited that 
 // it's not added to the queue
-func add(queue map[string]bool, newLinks []string, origPageUrl string, visited map[string]bool, ignores []*regexp.Regexp) {
+func add(queue map[string]bool, newLinks []string, origPageUrl string, visited map[string]bool, ignores []IgnoreRule) {
 	for _, link := range newLinks {
 		formatted := formatUrl(link, origPageUrl)
 		if formatted != "" && !visited[formatted] {
 			ignoreIt := false
 			for _, ignore := range ignores {
-				if ignore.MatchString(formatted) {
+				if (!ignore.inverse && ignore.rule.MatchString(formatted)) || (ignore.inverse && !ignore.rule.MatchString(formatted)) {
 					ignoreIt = true
 					break
 				}
+
 			}
 			if !ignoreIt {
 				// Add it to queue if it's not on the ignore list

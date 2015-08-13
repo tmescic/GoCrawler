@@ -1,2 +1,2 @@
 .*.jpg\z
-^njuskalo.hr/samsung
+!njuskalo
